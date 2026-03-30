@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Q‑NEXUS Prototype</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body class="bg-slate-950 text-slate-100">
+    <div class="min-h-screen">
+      <header class="border-b border-slate-800 bg-slate-950/80 backdrop-blur">
+        <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+          <div>
+            <h1 class="text-2xl font-semibold tracking-tight">Q‑NEXUS</h1>
+            <p class="text-sm text-slate-400">Quantum‑grounded neuro‑symbolic validation prototype</p>
+          </div>
+          
+        </div>
+      </header>
+
+      <main class="mx-auto max-w-6xl px-6 py-10">
+        <section class="grid gap-6 lg:grid-cols-[2fr_1fr]">
+          <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl">
+            <h2 class="text-lg font-semibold">Submit SMILES</h2>
+            <p class="mt-1 text-sm text-slate-400">Paste SMILES (one per line) or upload a CSV. The first column is used.</p>
+
+            <div class="mt-4 space-y-4">
+              <textarea id="smilesInput" class="w-full rounded-xl border border-slate-700 bg-slate-950/60 p-4 text-sm text-slate-100 focus:border-emerald-400 focus:outline-none" rows="8" placeholder="CCO
+C1=CC=CC=C1
+[H][H]"></textarea>
+
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <label class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-2 text-sm text-slate-300 hover:border-emerald-400">
+                  <input id="csvInput" type="file" accept=".csv" class="hidden" />
+                  Upload CSV
+                </label>
+                <button id="runBtn" class="w-full rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-400">
+                  Run Validation
+                </button>
+                <button id="clearBtn" class="w-full rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:border-slate-500">
+                  Clear
+                </button>
+              </div>
+              <p id="status" class="text-sm text-slate-400"></p>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+            <h3 class="text-sm font-semibold uppercase tracking-widest text-slate-400">Pipeline</h3>
+            <ul class="mt-4 space-y-3 text-sm text-slate-300">
+              <li class="flex items-center gap-2">
+                <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
+                Z3 valence + charge constraints
+              </li>
+              <li class="flex items-center gap-2">
+                <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
+                RDKit structural checks
+              </li>
+              <li class="flex items-center gap-2">
+                <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
+                Qiskit VQE (H2) or heuristic fallback
+              </li>
+            </ul>
+            <div class="mt-6 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+              <p class="text-xs text-slate-400">Tip: Start API first with <span class="text-emerald-300">uvicorn app:app --reload</span></p>
+            </div>
+          </div>
+        </section>
+
+        <section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+          <div class="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 class="text-lg font-semibold">Results</h2>
+              <p class="text-sm text-slate-400">Detailed verdicts for each molecule.</p>
+            </div>
+            <div class="flex gap-3">
+              <div class="rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-2 text-xs text-slate-300">
+                Pass rate: <span id="passRate">—</span>
+              </div>
+              <div class="rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-2 text-xs text-slate-300">
+                Count: <span id="count">—</span>
+              </div>
+              <button id="downloadPdf" class="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-xs text-emerald-200 hover:bg-emerald-500/20">
+                Download PDF
+              </button>
+            </div>
+          </div>
+
+          <div class="mt-6 overflow-x-auto">
+            <table class="min-w-full text-sm text-slate-200">
+              <thead class="text-left text-xs uppercase tracking-widest text-slate-400">
+                <tr>
+                  <th class="px-3 py-2">Structure</th>
+                  <th class="px-3 py-2">SMILES</th>
+                  <th class="px-3 py-2">Verdict</th>
+                  <th class="px-3 py-2">Energy (kcal/mol)</th>
+                  <th class="px-3 py-2">Method</th>
+                  <th class="px-3 py-2">Reason</th>
+                </tr>
+              </thead>
+              <tbody id="resultsBody" class="divide-y divide-slate-800"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="mt-8 grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+          <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+            <div class="flex items-center justify-between">
+              <div>
+                <h2 class="text-lg font-semibold">Run History</h2>
+                <p class="text-sm text-slate-400">Last 50 validation runs.</p>
+              </div>
+              <button id="refreshRuns" class="rounded-xl border border-slate-700 px-3 py-2 text-xs text-slate-300 hover:border-slate-500">
+                Refresh
+              </button>
+            </div>
+
+            <div class="mt-4 overflow-x-auto">
+              <table class="min-w-full text-sm text-slate-200">
+                <thead class="text-left text-xs uppercase tracking-widest text-slate-400">
+                  <tr>
+                    <th class="px-3 py-2">Run ID</th>
+                    <th class="px-3 py-2">Timestamp</th>
+                    <th class="px-3 py-2">Count</th>
+                  </tr>
+                </thead>
+                <tbody id="runsBody" class="divide-y divide-slate-800"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+            <h2 class="text-lg font-semibold">Selected Run</h2>
+            <p class="text-sm text-slate-400">Click a run to load its results.</p>
+            <div class="mt-4 rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-xs text-slate-300">
+              <p id="selectedRun">No run selected.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
