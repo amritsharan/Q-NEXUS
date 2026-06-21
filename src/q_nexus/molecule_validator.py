@@ -380,7 +380,7 @@ def qiskit_stability(mol_input) -> Dict[str, Optional[float]]:
     Currently supports H2 with a fixed Hamiltonian; returns unsupported otherwise.
     """
     _require_rdkit()
-    mol, _ = to_mol_and_canonical(mol_input)
+    mol, smiles = to_mol_and_canonical(mol_input)
 
     atoms = [atom.GetAtomicNum() for atom in mol.GetAtoms()]
     is_h2 = len(atoms) == 2 and all(a == 1 for a in atoms)

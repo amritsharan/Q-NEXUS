@@ -1,9 +1,24 @@
+# pyrefly: ignore-errors
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+import warnings
+
+# Override showwarning to completely suppress deprecation, langchain and user warnings
+_old_showwarning = warnings.showwarning
+def _new_showwarning(message, category, filename, lineno, file=None, line=None):
+    cat_name = category.__name__ if category else ""
+    if "deprecation" in cat_name.lower() or "userwarning" in cat_name.lower() or "langchain" in cat_name.lower():
+        return
+    _old_showwarning(message, category, filename, lineno, file, line)
+warnings.showwarning = _new_showwarning
+
+warnings.filterwarnings("ignore")
 from datetime import datetime, timezone
 from typing import List
+import bcrypt
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -17,6 +32,21 @@ app = FastAPI(title="Q-Nexus Prototype API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 DB_PATH = "q_nexus.db"
+
+# Vercel serverless environment workarounds: SQLite & Chroma require writable directories.
+if os.environ.get("VERCEL"):
+    import shutil
+    # Copy SQLite DB
+    tmp_db_path = "/tmp/q_nexus.db"
+    if not os.path.exists(tmp_db_path):
+        if os.path.exists("q_nexus.db"):
+            try:
+                shutil.copy("q_nexus.db", tmp_db_path)
+            except Exception as e:
+                print(f"Error copying SQLite database to /tmp: {e}")
+        else:
+            print("Warning: q_nexus.db template file not found in root.")
+    DB_PATH = tmp_db_path
 
 
 def _get_db() -> sqlite3.Connection:
@@ -38,6 +68,19 @@ def _init_db() -> None:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            password_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    try:
+        conn.execute("ALTER TABLE runs ADD COLUMN username TEXT")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -49,16 +92,55 @@ class BatchRequest(BaseModel):
     # Accept either `molecules` (new) or `smiles_list` (legacy). Both optional to allow raw list bodies.
     molecules: Optional[List[Any]] = None
     smiles_list: Optional[List[Any]] = None
+    username: Optional[str] = None
+
+
+class UserAuth(BaseModel):
+    username: str
+    password: str
 
 
 class QARequest(BaseModel):
     query: str
     persist_directory: str | None = None
+    api_key: str | None = None
 
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.post("/register")
+def register(payload: UserAuth):
+    conn = _get_db()
+    try:
+        row = conn.execute("SELECT username FROM users WHERE username = ?", (payload.username,)).fetchone()
+        if row:
+            raise HTTPException(status_code=400, detail="Username already exists")
+        
+        hashed = bcrypt.hashpw(payload.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        created_at = datetime.now(timezone.utc).isoformat()
+        conn.execute("INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)", (payload.username, hashed, created_at))
+        conn.commit()
+    finally:
+        conn.close()
+    return {"status": "success", "message": "User registered successfully"}
+
+
+@app.post("/login")
+def login(payload: UserAuth):
+    conn = _get_db()
+    try:
+        row = conn.execute("SELECT username, password_hash FROM users WHERE username = ?", (payload.username,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=400, detail="Invalid username or password")
+        
+        if not bcrypt.checkpw(payload.password.encode('utf-8'), row["password_hash"].encode('utf-8')):
+            raise HTTPException(status_code=400, detail="Invalid username or password")
+    finally:
+        conn.close()
+    return {"status": "success", "username": row["username"]}
 
 
 @app.get("/")
@@ -83,14 +165,15 @@ def validate_batch(payload: BatchRequest):
     conn = _get_db()
     cursor = conn.execute(
         """
-        INSERT INTO runs (created_at, input_count, payload_json, result_json)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO runs (created_at, input_count, payload_json, result_json, username)
+        VALUES (?, ?, ?, ?, ?)
         """,
         (
             created_at,
             len(input_list),
             json.dumps(input_list),
             json.dumps(results),
+            payload.username,
         ),
     )
     conn.commit()
@@ -101,11 +184,17 @@ def validate_batch(payload: BatchRequest):
 
 
 @app.get("/runs")
-def list_runs():
+def list_runs(username: Optional[str] = None):
     conn = _get_db()
-    rows = conn.execute(
-        "SELECT id, created_at, input_count FROM runs ORDER BY id DESC LIMIT 50"
-    ).fetchall()
+    if username:
+        rows = conn.execute(
+            "SELECT id, created_at, input_count FROM runs WHERE username = ? ORDER BY id DESC LIMIT 50",
+            (username,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT id, created_at, input_count FROM runs WHERE username IS NULL ORDER BY id DESC LIMIT 50"
+        ).fetchall()
     conn.close()
     return [dict(row) for row in rows]
 
@@ -134,23 +223,44 @@ def get_run(run_id: int):
 def qa_endpoint(payload: QARequest):
     try:
         from src.q_nexus.langchain_integration import get_retriever, answer_query, create_chroma_store
-    except Exception:
+    except Exception as e:
         raise HTTPException(
             status_code=503,
-            detail=(
-                "LangChain dependencies are not installed. Run `pip install -r requirements.txt` "
-                "or install the optional environment as described in README.md."
-            ),
+            detail=f"LangChain dependencies failed to load: {e}",
         )
 
-    persist_dir = payload.persist_directory or "./chroma_store"
+    api_key = payload.api_key or os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return {
+            "answer": "No OpenAI API Key found. Please configure your API key in the settings input at the top of the chatbot panel to enable the AI Copilot."
+        }
+
+    persist_dir = payload.persist_directory
+    if not persist_dir:
+        if os.environ.get("VERCEL"):
+            persist_dir = "/tmp/chroma_store"
+            # Copy chroma_store to /tmp if it doesn't exist yet
+            if not os.path.exists(persist_dir) and os.path.exists("chroma_store"):
+                try:
+                    import shutil
+                    shutil.copytree("chroma_store", persist_dir)
+                except Exception as e:
+                    print(f"Error copying chroma_store to /tmp: {e}")
+        else:
+            persist_dir = "./chroma_store"
     try:
-        retriever = get_retriever(persist_dir)
+        retriever = get_retriever(persist_dir, api_key=api_key)
     except Exception:
         # If store doesn't exist, create it from repo files
         repo_root = "./"
-        create_chroma_store(repo_root, persist_directory=persist_dir)
-        retriever = get_retriever(persist_dir)
+        try:
+            create_chroma_store(repo_root, persist_directory=persist_dir, api_key=api_key)
+            retriever = get_retriever(persist_dir, api_key=api_key)
+        except Exception as e:
+            return {"answer": f"Error indexing repository / initializing Chroma DB: {e}"}
 
-    answer = answer_query(payload.query, retriever)
-    return {"answer": answer}
+    try:
+        answer = answer_query(payload.query, retriever, api_key=api_key)
+        return {"answer": answer}
+    except Exception as e:
+        return {"answer": f"Error query execution: {e}"}

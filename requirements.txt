@@ -12,3 +12,8 @@ openai
 chromadb
 tiktoken
 python-dotenv
+numpy<2.0.0
+onnxruntime==1.18.1
+bcrypt
+langchain-openai
+langchain-community

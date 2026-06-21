@@ -3,145 +3,459 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Q‑NEXUS Prototype</title>
+    <title>Q-NEXUS | Quantum-Symbolic Molecular Validation</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              indigo: {
+                500: '#6366f1',
+                600: '#4f46e5',
+                700: '#4338ca',
+                950: '#0e0c28',
+              },
+              slate: {
+                900: '#0f172a',
+                950: '#030712',
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <!-- jsPDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <!-- Custom Style System -->
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
-  <body class="bg-slate-950 text-slate-100">
-    <div class="min-h-screen">
-      <header class="border-b border-slate-800 bg-slate-950/80 backdrop-blur">
-        <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+  <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
+    
+    <!-- Top Nav Header -->
+    <header class="border-b border-indigo-950 bg-slate-950/80 backdrop-blur sticky top-0 z-40">
+      <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+        <div class="flex items-center gap-3">
+          <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+            <i class="fa-solid fa-atom text-slate-950 text-xl font-bold"></i>
+          </div>
           <div>
-            <h1 class="text-2xl font-semibold tracking-tight">Q‑NEXUS</h1>
-            <p class="text-sm text-slate-400">Quantum‑grounded neuro‑symbolic validation prototype</p>
+            <h1 class="text-2xl font-bold tracking-tight bg-gradient-to-r from-indigo-200 via-indigo-100 to-emerald-300 bg-clip-text text-transparent">Q-NEXUS</h1>
+            <p class="text-xs text-indigo-400 font-medium tracking-wide uppercase">Quantum-Grounded Neuro-Symbolic Filter</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-4">
+          <div class="flex items-center gap-2 rounded-full border border-indigo-950 bg-indigo-950/40 px-3 py-1 text-xs text-indigo-300">
+            <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            FastAPI Live
           </div>
           
-        </div>
-      </header>
-
-      <main class="mx-auto max-w-6xl px-6 py-10">
-        <section class="grid gap-6 lg:grid-cols-[2fr_1fr]">
-          <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl">
-            <h2 class="text-lg font-semibold">Submit SMILES</h2>
-            <p class="mt-1 text-sm text-slate-400">Paste SMILES (one per line) or upload a CSV. The first column is used.</p>
-
-            <div class="mt-4 space-y-4">
-              <textarea id="smilesInput" class="w-full rounded-xl border border-slate-700 bg-slate-950/60 p-4 text-sm text-slate-100 focus:border-emerald-400 focus:outline-none" rows="8" placeholder="CCO
-C1=CC=CC=C1
-[H][H]"></textarea>
-
-              <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <label class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-2 text-sm text-slate-300 hover:border-emerald-400">
-                  <input id="csvInput" type="file" accept=".csv" class="hidden" />
-                  Upload CSV
-                </label>
-                <button id="runBtn" class="w-full rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-400">
-                  Run Validation
-                </button>
-                <button id="clearBtn" class="w-full rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:border-slate-500">
-                  Clear
-                </button>
-              </div>
-              <p id="status" class="text-sm text-slate-400"></p>
+          <!-- User Auth Status Bar -->
+          <div id="authStatusBar" class="flex items-center gap-3">
+            <button id="showAuthModalBtn" class="rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-4 py-2 text-xs font-semibold text-indigo-300 hover:bg-indigo-500/20 transition flex items-center gap-1.5">
+              <i class="fa-solid fa-right-to-bracket"></i>
+              Login / Sign Up
+            </button>
+            <div id="userInfoContainer" class="hidden items-center gap-3">
+              <span id="userWelcomeText" class="text-xs text-indigo-200 font-semibold"></span>
+              <button id="logoutBtn" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-600 transition flex items-center gap-1.5">
+                <i class="fa-solid fa-right-from-bracket"></i>
+                Logout
+              </button>
             </div>
           </div>
+        </div>
+      </div>
+    </header>
 
-          <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-            <h3 class="text-sm font-semibold uppercase tracking-widest text-slate-400">Pipeline</h3>
-            <ul class="mt-4 space-y-3 text-sm text-slate-300">
-              <li class="flex items-center gap-2">
-                <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
-                Z3 valence + charge constraints
-              </li>
-              <li class="flex items-center gap-2">
-                <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
-                RDKit structural checks
-              </li>
-              <li class="flex items-center gap-2">
-                <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
-                Qiskit VQE (H2) or heuristic fallback
-              </li>
-            </ul>
-            <div class="mt-6 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-              <p class="text-xs text-slate-400">Tip: Start API first with <span class="text-emerald-300">uvicorn app:app --reload</span></p>
+    <div class="mx-auto max-w-7xl w-full px-6 py-8 flex-1 grid gap-8 lg:grid-cols-[1fr_350px]">
+      
+      <!-- Main Left Area -->
+      <div class="space-y-8">
+        
+        <!-- Input Panel -->
+        <section class="rounded-2xl glass-panel-glow p-6 shadow-xl relative overflow-hidden">
+          <div class="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
+            <i class="fa-solid fa-flask text-8xl"></i>
+          </div>
+          <h2 class="text-xl font-bold flex items-center gap-2">
+            <i class="fa-solid fa-square-plus text-indigo-400"></i>
+            Submit SMILES Library
+          </h2>
+          <p class="mt-1 text-sm text-slate-400">Provide a list of SMILES strings (one per line) or upload a CSV containing SMILES in the first column.</p>
+
+          <div class="mt-5 space-y-4">
+            <textarea id="smilesInput" class="w-full rounded-xl border border-slate-800 bg-slate-950/80 p-4 text-sm font-mono text-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" rows="6" placeholder="CCO&#10;C1=CC=CC=C1&#10;[H][H]"></textarea>
+
+            <div class="grid gap-4 sm:grid-cols-[1.5fr_1fr_1fr]">
+              <label class="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-indigo-950/60 bg-indigo-950/20 px-4 py-3 text-sm text-indigo-300 hover:border-indigo-500 hover:bg-indigo-950/40 transition">
+                <input id="csvInput" type="file" accept=".csv" class="hidden" />
+                <i class="fa-solid fa-file-csv text-base"></i>
+                <span>Upload CSV File</span>
+              </label>
+              
+              <button id="runBtn" class="rounded-xl btn-emerald flex items-center justify-center gap-2 py-3 text-sm font-semibold">
+                <i class="fa-solid fa-play"></i>
+                Run Pipeline
+              </button>
+              
+              <button id="clearBtn" class="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3 text-sm text-slate-300 hover:border-slate-600 hover:bg-slate-900 transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-trash-can"></i>
+                Clear Inputs
+              </button>
+            </div>
+            <p id="status" class="text-xs text-indigo-400 font-medium"></p>
+          </div>
+        </section>
+
+        <!-- Visualization Panel (Dynamic Charts) -->
+        <section id="visualsPanel" class="rounded-2xl glass-panel p-6 hidden">
+          <h2 class="text-xl font-bold flex items-center gap-2 mb-4">
+            <i class="fa-solid fa-chart-line text-indigo-400"></i>
+            Run Visualizations
+          </h2>
+          <div class="grid md:grid-cols-2 gap-6">
+            <!-- Verdict Chart -->
+            <div class="bg-slate-950/50 rounded-xl p-4 border border-slate-900 flex flex-col items-center justify-center min-h-[250px]">
+              <h3 class="text-sm font-medium text-slate-400 mb-2">Verdict Distribution</h3>
+              <div class="w-full max-w-[200px]">
+                <canvas id="verdictChart"></canvas>
+              </div>
+            </div>
+            <!-- Energy vs Wt Chart -->
+            <div class="bg-slate-950/50 rounded-xl p-4 border border-slate-900 flex flex-col items-center justify-center min-h-[250px]">
+              <h3 class="text-sm font-medium text-slate-400 mb-2">Molecular Weight vs Classical Energy</h3>
+              <div class="w-full h-full min-h-[200px]">
+                <canvas id="energyChart"></canvas>
+              </div>
             </div>
           </div>
         </section>
 
-        <section class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-          <div class="flex flex-wrap items-center justify-between gap-4">
+        <!-- Results Table Panel -->
+        <section class="rounded-2xl glass-panel p-6 shadow-xl">
+          <div class="flex flex-wrap items-center justify-between gap-4 border-b border-indigo-950/40 pb-4 mb-6">
             <div>
-              <h2 class="text-lg font-semibold">Results</h2>
-              <p class="text-sm text-slate-400">Detailed verdicts for each molecule.</p>
+              <h2 class="text-xl font-bold flex items-center gap-2">
+                <i class="fa-solid fa-square-poll-vertical text-emerald-400"></i>
+                Evaluation Verdicts
+              </h2>
+              <p class="text-xs text-slate-400 mt-0.5">Click any row below to view detailed quantum/classical constraints.</p>
             </div>
-            <div class="flex gap-3">
-              <div class="rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-2 text-xs text-slate-300">
-                Pass rate: <span id="passRate">—</span>
+            
+            <div class="flex flex-wrap gap-3">
+              <div class="rounded-xl border border-indigo-950/50 bg-indigo-950/20 px-4 py-2 text-xs text-indigo-300">
+                Pass Rate: <span id="passRate" class="font-bold text-emerald-400">—</span>
               </div>
-              <div class="rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-2 text-xs text-slate-300">
-                Count: <span id="count">—</span>
+              <div class="rounded-xl border border-indigo-950/50 bg-indigo-950/20 px-4 py-2 text-xs text-indigo-300">
+                Count: <span id="count" class="font-bold text-indigo-200">—</span>
               </div>
-              <button id="downloadPdf" class="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-xs text-emerald-200 hover:bg-emerald-500/20">
-                Download PDF
+              <button id="downloadPdf" class="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-xs text-emerald-300 hover:bg-emerald-500/20 transition flex items-center gap-1.5 font-medium">
+                <i class="fa-solid fa-file-pdf"></i>
+                Export PDF
               </button>
             </div>
           </div>
 
-          <div class="mt-6 overflow-x-auto">
+          <div class="overflow-x-auto">
             <table class="min-w-full text-sm text-slate-200">
-              <thead class="text-left text-xs uppercase tracking-widest text-slate-400">
+              <thead class="text-left text-xs uppercase tracking-widest text-slate-400 border-b border-slate-800">
                 <tr>
-                  <th class="px-3 py-2">Structure</th>
-                  <th class="px-3 py-2">SMILES</th>
-                  <th class="px-3 py-2">Verdict</th>
-                  <th class="px-3 py-2">Energy (kcal/mol)</th>
-                  <th class="px-3 py-2">Method</th>
-                  <th class="px-3 py-2">Reason</th>
+                  <th class="px-4 py-3">Structure</th>
+                  <th class="px-4 py-3">SMILES</th>
+                  <th class="px-4 py-3">Verdict</th>
+                  <th class="px-4 py-3">Energy (kcal/mol)</th>
+                  <th class="px-4 py-3">Method</th>
+                  <th class="px-4 py-3">Primary Reason / Errors</th>
                 </tr>
               </thead>
-              <tbody id="resultsBody" class="divide-y divide-slate-800"></tbody>
+              <tbody id="resultsBody" class="divide-y divide-slate-900">
+                <tr>
+                  <td colspan="6" class="px-4 py-8 text-center text-slate-500 text-xs">
+                    No validation run completed. Enter SMILES and run pipeline above.
+                  </td>
+                </tr>
+              </tbody>
             </table>
           </div>
         </section>
 
-        <section class="mt-8 grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-          <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-            <div class="flex items-center justify-between">
-              <div>
-                <h2 class="text-lg font-semibold">Run History</h2>
-                <p class="text-sm text-slate-400">Last 50 validation runs.</p>
-              </div>
-              <button id="refreshRuns" class="rounded-xl border border-slate-700 px-3 py-2 text-xs text-slate-300 hover:border-slate-500">
-                Refresh
-              </button>
+        <!-- History Panel -->
+        <section class="rounded-2xl glass-panel p-6 shadow-xl">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-xl font-bold flex items-center gap-2">
+                <i class="fa-solid fa-clock-rotate-left text-indigo-400"></i>
+                Execution Logs
+              </h2>
+              <p class="text-xs text-slate-400">Stored history of local validation batches.</p>
             </div>
-
-            <div class="mt-4 overflow-x-auto">
-              <table class="min-w-full text-sm text-slate-200">
-                <thead class="text-left text-xs uppercase tracking-widest text-slate-400">
-                  <tr>
-                    <th class="px-3 py-2">Run ID</th>
-                    <th class="px-3 py-2">Timestamp</th>
-                    <th class="px-3 py-2">Count</th>
-                  </tr>
-                </thead>
-                <tbody id="runsBody" class="divide-y divide-slate-800"></tbody>
-              </table>
-            </div>
+            <button id="refreshRuns" class="rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2 text-xs text-slate-300 hover:border-slate-600 hover:bg-slate-900 transition flex items-center gap-1">
+              <i class="fa-solid fa-rotate-right"></i>
+              Refresh
+            </button>
           </div>
 
-          <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-            <h2 class="text-lg font-semibold">Selected Run</h2>
-            <p class="text-sm text-slate-400">Click a run to load its results.</p>
-            <div class="mt-4 rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-xs text-slate-300">
-              <p id="selectedRun">No run selected.</p>
+          <div class="grid gap-6 md:grid-cols-[1.5fr_1fr]">
+            <div class="overflow-x-auto">
+              <table class="min-w-full text-sm text-slate-200">
+                <thead class="text-left text-xs uppercase tracking-widest text-slate-400 border-b border-slate-800">
+                  <tr>
+                    <th class="px-4 py-2">Run ID</th>
+                    <th class="px-4 py-2">Timestamp</th>
+                    <th class="px-4 py-2">Molecules Count</th>
+                  </tr>
+                </thead>
+                <tbody id="runsBody" class="divide-y divide-slate-900">
+                  <tr>
+                    <td colspan="3" class="px-4 py-4 text-center text-slate-500 text-xs">
+                      No logs found.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <div class="rounded-xl border border-indigo-950/60 bg-indigo-950/10 p-5 flex flex-col justify-between">
+              <div>
+                <h3 class="text-sm font-semibold text-indigo-300 mb-2 uppercase tracking-wide">Selected Execution Log</h3>
+                <p id="selectedRun" class="text-xs text-slate-400">Click an execution row on the left to examine its full output payload.</p>
+              </div>
+              <div class="mt-4 pt-4 border-t border-indigo-950/40 text-xxs text-indigo-400 font-mono">
+                Q-NEXUS local SQLite run history tracker limit: 50 runs.
+              </div>
             </div>
           </div>
         </section>
-      </main>
+
+      </div>
+
+      <!-- Right Column: AI Chatbot Panel & Pipeline Stats -->
+      <aside class="space-y-6">
+        
+        <!-- Molecular Copilot Chatbox -->
+        <section class="rounded-2xl glass-panel-glow border-indigo-500/20 shadow-xl overflow-hidden flex flex-col h-[550px]">
+          <!-- Chat Header -->
+          <div class="p-4 bg-indigo-950/60 border-b border-indigo-900/60 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <div class="h-8 w-8 rounded-lg bg-indigo-500 flex items-center justify-center text-slate-950">
+                <i class="fa-solid fa-robot"></i>
+              </div>
+              <div>
+                <h3 class="font-bold text-sm text-slate-100">Molecular Copilot</h3>
+                <span class="text-xxs text-indigo-400 font-medium">Neuro-Symbolic Assistant</span>
+              </div>
+            </div>
+            
+            <!-- API Key Settings Trigger -->
+            <button id="toggleSettings" class="text-slate-400 hover:text-slate-200 transition text-sm">
+              <i class="fa-solid fa-key"></i>
+            </button>
+          </div>
+
+          <!-- API Key Input Panel (Collapsible) -->
+          <div id="apiKeyPanel" class="p-4 bg-slate-900/90 border-b border-indigo-950 hidden space-y-2">
+            <label class="block text-xxs uppercase tracking-wider text-indigo-300 font-bold">OpenAI API Key</label>
+            <div class="relative">
+              <input id="apiKeyInput" type="password" class="w-full bg-slate-950 border border-slate-800 rounded-lg py-1.5 pl-3 pr-8 text-xs font-mono text-slate-300 focus:outline-none focus:border-indigo-500" placeholder="sk-..." />
+              <button id="saveApiKey" class="absolute right-1 top-1 bg-indigo-600 hover:bg-indigo-500 text-xxs font-bold text-slate-100 px-2 py-1 rounded">Save</button>
+            </div>
+            <p class="text-xxs text-slate-500">Key is saved in sessionStorage. Keep it safe.</p>
+          </div>
+
+          <!-- Chat Messages Area -->
+          <div id="chatMessages" class="flex-1 p-4 overflow-y-auto space-y-3 text-xs">
+            <div class="flex items-start gap-2">
+              <div class="h-6 w-6 rounded-full bg-indigo-500/20 text-indigo-300 flex items-center justify-center text-xxs mt-0.5">
+                <i class="fa-solid fa-robot"></i>
+              </div>
+              <div class="chat-bubble-bot p-3 max-w-[85%]">
+                <p>Hello! I am your <strong>Q-Nexus Molecular Copilot</strong>. Ask me anything about the local validation pipeline, symbolic constraints, or quantum chemistry parameters!</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Suggestion Prompts -->
+          <div class="px-4 py-2 border-t border-slate-900/50 bg-slate-950/20 space-y-1">
+            <p class="text-xxs text-slate-500 uppercase tracking-widest font-bold">Quick Suggestions</p>
+            <div class="flex flex-wrap gap-1.5 py-1">
+              <button class="suggestion-pill text-xxs px-2 py-1 rounded-full border border-slate-800 bg-slate-900/30 text-indigo-300 text-left" onclick="sendSuggestion('How does the Z3 valence check work?')">
+                Z3 Valence Check?
+              </button>
+              <button class="suggestion-pill text-xxs px-2 py-1 rounded-full border border-slate-800 bg-slate-900/30 text-indigo-300 text-left" onclick="sendSuggestion('Explain the synthesizability criteria.')">
+                Synthesizability Rules?
+              </button>
+              <button class="suggestion-pill text-xxs px-2 py-1 rounded-full border border-slate-800 bg-slate-900/30 text-indigo-300 text-left" onclick="sendSuggestion('How is H2 stability computed via VQE?')">
+                VQE for H2?
+              </button>
+            </div>
+          </div>
+
+          <!-- Chat Input Area -->
+          <div class="p-3 bg-slate-950/40 border-t border-slate-900/80 flex gap-2">
+            <input id="chatInput" type="text" class="flex-1 rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500" placeholder="Ask a molecular question..." />
+            <button id="sendChatBtn" class="bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg px-3 flex items-center justify-center transition">
+              <i class="fa-solid fa-paper-plane text-xs"></i>
+            </button>
+          </div>
+        </section>
+
+        <!-- Pipeline Constraints Summary -->
+        <section class="rounded-2xl glass-panel p-5 space-y-4">
+          <h3 class="text-sm font-semibold uppercase tracking-wider text-indigo-300">Pipeline Stages</h3>
+          <ul class="space-y-3.5 text-xs text-slate-300">
+            <li class="flex items-start gap-3">
+              <span class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-xxs">1</span>
+              <div>
+                <p class="font-semibold text-slate-200">Z3 Symbolic Checker</p>
+                <p class="text-xxs text-slate-400 mt-0.5">Applies solver-proven constraints on atomic valence rules and formal charge bounds.</p>
+              </div>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-indigo-500/20 text-indigo-300 font-bold text-xxs">2</span>
+              <div>
+                <p class="font-semibold text-slate-200">RDKit Structural Check</p>
+                <p class="text-xxs text-slate-400 mt-0.5">Filters rings (>8), heavy atoms count (>60), and molecular weights (>800).</p>
+              </div>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-xxs">3</span>
+              <div>
+                <p class="font-semibold text-slate-200">Quantum Stability Proxy</p>
+                <p class="text-xxs text-slate-400 mt-0.5">Calculates H2 minimum eigenvalue via Qiskit VQE, falling back to MMFF94 forcefields.</p>
+              </div>
+            </li>
+          </ul>
+        </section>
+        
+      </aside>
+
     </div>
 
+    <!-- Molecule Inspection Detailed Modal -->
+    <div id="detailsModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay hidden">
+      <div class="w-full max-w-2xl rounded-2xl glass-panel-glow border-indigo-500/30 p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto flex flex-col">
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between border-b border-indigo-950 pb-3 mb-4">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-magnifying-glass-chart text-indigo-400 text-lg"></i>
+            <h3 class="text-lg font-bold text-slate-100">Molecular Inspection Card</h3>
+          </div>
+          <button id="closeModalBtn" class="text-slate-400 hover:text-slate-200 transition text-lg">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <!-- Modal Body Content -->
+        <div class="flex-1 space-y-6">
+          <div class="grid md:grid-cols-[1.2fr_1fr] gap-6">
+            
+            <!-- Left Side: Structure Image -->
+            <div class="flex flex-col items-center justify-center bg-slate-950/80 rounded-xl border border-slate-900 p-4 min-h-[220px]">
+              <span class="text-xxs text-slate-500 uppercase tracking-widest mb-2 font-bold">Computed 2D Coordinates</span>
+              <div id="modalStructureImage" class="w-full flex items-center justify-center max-w-[280px]">
+                <!-- Base64 PNG goes here -->
+              </div>
+            </div>
+
+            <!-- Right Side: Metrics List -->
+            <div class="space-y-4">
+              <div>
+                <span class="text-xxs uppercase text-indigo-300 font-bold tracking-wider">Canonical SMILES</span>
+                <p id="modalSmiles" class="text-sm font-mono bg-slate-950/50 p-2 rounded-lg border border-indigo-950/30 mt-1 select-all break-all"></p>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="bg-indigo-950/10 border border-indigo-950/40 rounded-lg p-3">
+                  <span class="block text-xxs text-indigo-400">Molecular Wt.</span>
+                  <span id="modalMolWt" class="text-sm font-semibold text-slate-100"></span>
+                </div>
+                <div class="bg-indigo-950/10 border border-indigo-950/40 rounded-lg p-3">
+                  <span class="block text-xxs text-indigo-400">Heavy Atoms</span>
+                  <span id="modalHeavyAtoms" class="text-sm font-semibold text-slate-100"></span>
+                </div>
+                <div class="bg-indigo-950/10 border border-indigo-950/40 rounded-lg p-3">
+                  <span class="block text-xxs text-indigo-400">Rings Count</span>
+                  <span id="modalRings" class="text-sm font-semibold text-slate-100"></span>
+                </div>
+                <div class="bg-indigo-950/10 border border-indigo-950/40 rounded-lg p-3">
+                  <span class="block text-xxs text-indigo-400">Energy (kcal/mol)</span>
+                  <span id="modalEnergy" class="text-sm font-semibold text-slate-100"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Stage Checklist -->
+          <div class="bg-slate-950/60 rounded-xl p-4 border border-indigo-950/20">
+            <h4 class="text-xs font-semibold text-indigo-300 uppercase tracking-widest mb-3">Validation Pipeline Checklist</h4>
+            <div class="grid md:grid-cols-3 gap-3">
+              <div class="flex items-center gap-2 text-xs">
+                <i id="checkZ3" class="fa-solid"></i>
+                <span>Z3 Symbolic Constraints</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <i id="checkRDKit" class="fa-solid"></i>
+                <span>RDKit Descriptors check</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <i id="checkStability" class="fa-solid"></i>
+                <span>Quantum Energy Bounds</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Accordion Raw Output -->
+          <div>
+            <button id="toggleRawJson" class="w-full flex items-center justify-between text-xs text-indigo-300 font-bold bg-slate-900/40 hover:bg-slate-900/80 px-4 py-2 rounded-lg border border-slate-800 transition">
+              <span>EXAMINE RAW METADATA JSON</span>
+              <i class="fa-solid fa-chevron-down"></i>
+            </button>
+            <pre id="rawJsonArea" class="hidden text-xxs bg-slate-950 border border-slate-900 p-4 rounded-lg mt-2 overflow-x-auto text-emerald-400 max-h-[150px] font-mono"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Auth Modal (Login / Sign Up) -->
+    <div id="authModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay hidden">
+      <div class="w-full max-w-sm rounded-2xl glass-panel-glow border-indigo-500/30 p-6 shadow-2xl relative">
+        <!-- Close Button -->
+        <button id="closeAuthModalBtn" class="absolute right-4 top-4 text-slate-400 hover:text-slate-200 transition text-lg">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+
+        <!-- Auth Tabs -->
+        <div class="flex border-b border-indigo-950/50 mb-6">
+          <button id="tabLogin" class="flex-1 pb-2.5 text-sm font-bold text-indigo-400 border-b-2 border-indigo-500 focus:outline-none">Login</button>
+          <button id="tabRegister" class="flex-1 pb-2.5 text-sm font-bold text-slate-500 border-b-2 border-transparent focus:outline-none">Sign Up</button>
+        </div>
+
+        <!-- Auth Form -->
+        <form id="authForm" class="space-y-4" onsubmit="return false;">
+          <div>
+            <label class="block text-xxs uppercase tracking-wider text-indigo-300 font-bold mb-1">Username</label>
+            <input id="authUsername" type="text" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500" placeholder="e.g. quantum_user" />
+          </div>
+          <div>
+            <label class="block text-xxs uppercase tracking-wider text-indigo-300 font-bold mb-1">Password</label>
+            <input id="authPassword" type="password" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500" placeholder="••••••••" />
+          </div>
+          
+          <p id="authErrorMsg" class="text-xxs text-rose-400 font-medium hidden"></p>
+
+          <button id="authSubmitBtn" class="w-full rounded-xl btn-indigo flex items-center justify-center gap-2 py-2.5 text-xs font-semibold mt-2">
+            Login
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Client Script -->
     <script src="/static/app.js"></script>
   </body>
 </html>
